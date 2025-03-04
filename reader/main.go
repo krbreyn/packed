@@ -21,7 +21,7 @@ func main() {
 	m := initialModel()
 
 	if len(os.Args) != 2 {
-		fmt.Println("usage: packer [fiile]")
+		fmt.Println("usage: packer [file]")
 		os.Exit(0)
 	}
 
@@ -51,10 +51,10 @@ func main() {
 	}
 }
 
-func unpackFile(file *os.File) (map[string]string, error) {
+func unpackFile(file *os.File) ([]entry, error) {
 	tr := tar.NewReader(file)
 
-	entries := make(map[string]string)
+	var entries []entry
 
 	for {
 		hdr, err := tr.Next()
@@ -70,7 +70,7 @@ func unpackFile(file *os.File) (map[string]string, error) {
 			if _, err := io.Copy(&buf, tr); err != nil {
 				return nil, err
 			}
-			entries[hdr.Name] = buf.String()
+			entries = append(entries, entry{name: hdr.Name, data: buf.String()})
 		}
 	}
 
@@ -79,14 +79,19 @@ func unpackFile(file *os.File) (map[string]string, error) {
 
 // bubble tea stuff
 func initialModel() model {
-	m := model{exitMsg: "goodbye, world!", displayMsg: "hello, world!"}
+	m := model{}
 	return m
 }
 
 type model struct {
-	exitMsg    string
-	displayMsg string
-	entries    map[string]string
+	exitMsg string
+	picked  entry
+	loc     int
+	entries []entry
+}
+
+type entry struct {
+	name, data string
 }
 
 func (m model) Init() tea.Cmd {
@@ -96,11 +101,24 @@ func (m model) Init() tea.Cmd {
 func (m model) View() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("===\n\t%s\n\n", m.displayMsg))
+	switch m.picked {
 
-	sb.WriteString("Files:\n")
-	for name, data := range m.entries {
-		sb.WriteString(fmt.Sprintf("%s: %s", name, data))
+	case entry{}:
+		sb.WriteString(fmt.Sprintf("===\n\t%s %s\n\n", "hello, world!", m.picked.name))
+
+		var i int
+		sb.WriteString("Files:\n")
+		for _, entry := range m.entries {
+			if i == m.loc {
+				sb.WriteString(">")
+			}
+			sb.WriteString(fmt.Sprintf(" %s\n", entry.name))
+			i++
+		}
+
+	default:
+		sb.WriteString(m.picked.data)
+
 	}
 
 	return sb.String()
@@ -120,6 +138,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "ctrl+d", "q":
 			return m, tea.Quit
+
+		case "esc":
+			m.picked = entry{}
+
+		case "enter":
+			m.picked = m.entries[m.loc]
+
+		case "down":
+			if m.loc < len(m.entries)-1 {
+				m.loc++
+			}
+
+		case "up":
+			if m.loc > 0 {
+				m.loc--
+			}
 		}
 
 	case tea.WindowSizeMsg:

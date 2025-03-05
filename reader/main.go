@@ -8,14 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-// open zip file
-// read dir.packed for structure
-// read all the data in advance (could be exploited with really large files)
-// display menu and choices
-// use bubble tea viewport bubble for reading
 
 func main() {
 	m := initialModel()
@@ -36,7 +31,7 @@ func main() {
 	}
 	m.entries = entries
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	if m, err := p.Run(); err != nil {
 		fmt.Println("err:", err)
@@ -58,6 +53,7 @@ func unpackFile(file *os.File) ([]entry, error) {
 
 	for {
 		hdr, err := tr.Next()
+
 		if err == io.EOF {
 			break
 		}
@@ -77,17 +73,22 @@ func unpackFile(file *os.File) ([]entry, error) {
 	return entries, nil
 }
 
-// bubble tea stuff
+/*
+	bubble tea stuff
+*/
+
 func initialModel() model {
 	m := model{}
 	return m
 }
 
 type model struct {
-	exitMsg string
-	picked  entry
-	loc     int
-	entries []entry
+	exitMsg  string
+	loc      int
+	picked   entry
+	entries  []entry
+	viewport viewport.Model
+	ready    bool
 }
 
 type entry struct {
@@ -95,7 +96,7 @@ type entry struct {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.EnterAltScreen
+	return nil
 }
 
 func (m model) View() string {
@@ -115,17 +116,17 @@ func (m model) View() string {
 			sb.WriteString(fmt.Sprintf(" %s\n", entry.name))
 			i++
 		}
+		return sb.String()
 
 	default:
-		sb.WriteString(m.picked.data)
+		return m.viewport.View()
 
 	}
-
-	return sb.String()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
+		cmd  tea.Cmd
 		cmds []tea.Cmd
 	)
 
@@ -144,6 +145,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			m.picked = m.entries[m.loc]
+			m.viewport.SetContent(m.picked.data)
 
 		case "down":
 			if m.loc < len(m.entries)-1 {
@@ -157,7 +159,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
+		if !m.ready {
+			m.viewport = viewport.New(msg.Width, msg.Height)
+			m.viewport.SetContent(m.picked.data)
+			m.ready = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height
+		}
 	}
+
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }

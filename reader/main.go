@@ -148,12 +148,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.picked.data)
 
 		case "down":
-			if m.loc < len(m.entries)-1 {
+			null := entry{}
+			if m.picked == null && m.loc < len(m.entries)-1 {
 				m.loc++
 			}
 
 		case "up":
-			if m.loc > 0 {
+			null := entry{}
+			if m.picked == null && m.loc > 0 {
 				m.loc--
 			}
 		}
